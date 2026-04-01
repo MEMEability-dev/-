@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A股选股平台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+/* === APPLE-INSPIRED STYLES === */
+
+/* --- Base & Typography --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg-base: #000000;
+  --bg-elevated: rgba(28, 28, 30, 0.72);
+  --bg-secondary: rgba(44, 44, 46, 0.65);
+  --bg-tertiary: rgba(58, 58, 60, 0.5);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(255, 255, 255, 0.14);
+  --text-primary: #f5f5f7;
+  --text-secondary: rgba(245, 245, 247, 0.6);
+  --text-tertiary: rgba(245, 245, 247, 0.35);
+  --accent: #0A84FF;
+  --accent-hover: #409CFF;
+  --accent-glow: rgba(10, 132, 255, 0.25);
+  --green-accent: #30D158;
+  --orange-accent: #FF9F0A;
+  --red-accent: #FF453A;
+  --surface-glass: rgba(255, 255, 255, 0.04);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Helvetica Neue', sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- Frosted Glass Panels --- */
+.glass-panel {
+  background: var(--bg-elevated);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+}
+
+.glass-panel-subtle {
+  background: var(--surface-glass);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+
+/* --- Formula Editor --- */
+.formula-editor {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+  font-size: 13.5px;
+  resize: vertical;
+  tab-size: 4;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.formula-editor:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.formula-editor::placeholder { color: var(--text-tertiary); }
+
+/* --- Tab Buttons --- */
+.tab-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+.tab-inactive {
+  background: var(--surface-glass);
+  color: var(--text-secondary);
+  border-color: var(--glass-border);
+}
+.tab-inactive:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+/* --- Stat Cards --- */
+.stat-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+.stat-card:hover {
+  border-color: var(--glass-border-hover);
+  transform: translateY(-1px);
+}
+
+/* --- Results Table --- */
+.result-row:hover { background: rgba(255, 255, 255, 0.04) !important; }
+.result-row { transition: background 0.15s ease; }
+
+/* --- Stock Colors (Chinese Convention: Red=Up, Green=Down) --- */
+.text-up { color: #FF453A; }
+.text-down { color: #30D158; }
+.bg-up { background-color: rgba(255, 69, 58, 0.12); }
+.bg-down { background-color: rgba(48, 209, 88, 0.12); }
+
+/* --- Loading / Animation --- */
+#loading-overlay { transition: opacity 0.3s ease; }
+.fade-in { animation: fadeIn 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* --- Scrollbar --- */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* --- Strategy Panel --- */
+#strategy-panel {
+  backdrop-filter: blur(60px) saturate(200%);
+  -webkit-backdrop-filter: blur(60px) saturate(200%);
+  background: rgba(28, 28, 30, 0.88);
+}
+#strategy-panel.open { transform: translateX(0); }
+.strategy-card {
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+.strategy-card:hover {
+  border-color: var(--accent);
+  background: rgba(10, 132, 255, 0.06);
+  transform: translateY(-1px);
+}
+
+/* --- Progress Bar --- */
+.update-progress-bar { transition: width 0.3s ease; }
+
+/* --- Pill Buttons --- */
+.btn-pill {
+  border-radius: 980px;
+  font-weight: 500;
+  font-size: 13px;
+  padding: 7px 18px;
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+  letter-spacing: -0.01em;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 12px var(--accent-glow);
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 4px 20px var(--accent-glow);
+  transform: scale(1.02);
+}
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.btn-green {
+  background: rgba(48, 209, 88, 0.15);
+  color: var(--green-accent);
+}
+.btn-green:hover {
+  background: rgba(48, 209, 88, 0.25);
+}
+.btn-orange {
+  background: rgba(255, 159, 10, 0.15);
+  color: var(--orange-accent);
+}
+.btn-orange:hover {
+  background: rgba(255, 159, 10, 0.25);
+}
+
+/* --- Inputs (Apple-style) --- */
+.apple-input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 7px 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  outline: none;
+}
+.apple-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.apple-input::placeholder { color: var(--text-tertiary); }
+
+.apple-select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 7px 14px;
+  transition: border-color 0.2s ease;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8.5L1.5 4h9L6 8.5z' fill='%23999'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+.apple-select:focus { border-color: var(--accent); }
+
+/* --- Dialog Backdrop --- */
+.dialog-backdrop {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.dialog-content {
+  background: rgba(44, 44, 46, 0.92);
+  backdrop-filter: blur(60px) saturate(180%);
+  -webkit-backdrop-filter: blur(60px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+
+/* --- Apple Checkbox --- */
+.apple-checkbox {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+.apple-checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.apple-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+/* --- Spinner --- */
+.apple-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* --- Header blur strip --- */
+.header-bar {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* --- Divider --- */
+.divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+}
+</style>
+</head>
+<body class="min-h-screen">
+<!-- Header -->
+<header class="header-bar sticky top-0 z-30 px-6 py-3">
+  <div class="flex items-center justify-between max-w-[1920px] mx-auto">
+    <div class="flex items-center gap-3">
+      <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+      </div>
+      <h1 class="text-base font-semibold tracking-tight" style="color: var(--text-primary);">A股选股平台</h1>
+      <span class="text-[10px] font-medium px-2 py-0.5 rounded-full" style="background: var(--surface-glass); color: var(--text-tertiary); border: 1px solid var(--glass-border);">v1.2</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <label class="text-xs font-medium" style="color: var(--text-tertiary);">选股日期</label>
+      <input type="date" id="screen-date" value="2024-10-15" class="apple-input text-xs">
+      <label class="flex items-center gap-2 text-xs cursor-pointer" style="color: var(--text-secondary);">
+        <input type="checkbox" id="exclude-st" checked class="apple-checkbox">
+        排除ST
+      </label>
+      <select id="market-filter" class="apple-select text-xs">
+        <option value="">全部市场</option>
+        <option value="主板">主板</option>
+        <option value="创业板">创业板</option>
+        <option value="科创板">科创板</option>
+      </select>
+      <div class="divider"></div>
+      <button onclick="startDataUpdate()" id="btn-update-data"
+        class="btn-pill btn-orange flex items-center gap-1.5 text-xs">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        <span>更新数据</span>
+      </button>
+      <span id="data-status-label" class="text-[11px]" style="color: var(--text-tertiary);"></span>
+    </div>
+  </div>
+</header>
+
+<!-- Main Content -->
+<main class="max-w-[1920px] mx-auto p-4 grid grid-cols-12 gap-4" style="height: calc(100vh - 56px);">
+  <!-- Left Panel: Formula + Results -->
+  <div class="col-span-7 flex flex-col gap-4 overflow-hidden">
+    <!-- Formula Editor -->
+    <div class="glass-panel p-5 flex-shrink-0">
+      <!-- Formula Type Tabs -->
+      <div class="flex items-center gap-2 mb-4">
+        <button onclick="switchTab('tdx')" id="tab-tdx" class="tab-active px-4 py-1.5 rounded-full text-xs font-medium border transition-all duration-200">通达信公式</button>
+        <button onclick="switchTab('python')" id="tab-python" class="tab-inactive px-4 py-1.5 rounded-full text-xs font-medium border transition-all duration-200">Python</button>
+        <button onclick="switchTab('pseudo')" id="tab-pseudo" class="tab-inactive px-4 py-1.5 rounded-full text-xs font-medium border transition-all duration-200">伪代码</button>
+        <div class="flex-1"></div>
+        <select id="template-select" onchange="loadTemplate(this.value)" class="apple-select text-xs max-w-[180px]">
+          <option value="">选择模板...</option>
+        </select>
+      </div>
+      <!-- Editor -->
+      <textarea id="formula-editor" class="formula-editor w-full p-4" rows="4"
+        placeholder="输入选股公式...&#10;通达信示例: CROSS(MA(CLOSE, 5), MA(CLOSE, 10))&#10;Python示例: cross(ma(close, 5), ma(close, 10))&#10;伪代码示例: 5日均线 上穿 10日均线">CROSS(MA(CLOSE, 5), MA(CLOSE, 10))</textarea>
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-2.5 mt-4">
+        <button onclick="validateFormula()" class="btn-pill btn-secondary text-xs">验证公式</button>
+        <button onclick="screenStocks()" class="btn-pill btn-primary text-xs font-semibold px-6">开始选股</button>
+        <button onclick="exportCSV()" id="btn-export" class="btn-pill btn-secondary text-xs hidden">导出CSV</button>
+        <div class="divider"></div>
+        <button onclick="openSaveDialog()" class="btn-pill btn-green text-xs">保存策略</button>
+        <button onclick="toggleStrategyPanel()" id="btn-strategies" class="btn-pill btn-secondary text-xs">我的策略 <span id="strategy-count" style="color: var(--text-tertiary);"></span></button>
+        <div class="flex-1"></div>
+        <span id="validate-msg" class="text-xs"></span>
+      </div>
+    </div>
+
+    <!-- Results Summary -->
+    <div id="stats-panel" class="hidden flex-shrink-0 fade-in">
+      <div class="grid grid-cols-4 gap-3">
+        <div class="stat-card p-4">
+          <div class="text-[11px] font-medium mb-2" style="color: var(--text-tertiary);">3日表现</div>
+          <div class="flex justify-between items-end">
+            <span id="stat-avg-3d" class="text-lg font-bold tracking-tight">-</span>
+            <span id="stat-wr-3d" class="text-xs" style="color: var(--text-tertiary);">胜率 -</span>
+          </div>
+        </div>
+        <div class="stat-card p-4">
+          <div class="text-[11px] font-medium mb-2" style="color: var(--text-tertiary);">5日表现</div>
+          <div class="flex justify-between items-end">
+            <span id="stat-avg-5d" class="text-lg font-bold tracking-tight">-</span>
+            <span id="stat-wr-5d" class="text-xs" style="color: var(--text-tertiary);">胜率 -</span>
+          </div>
+        </div>
+        <div class="stat-card p-4">
+          <div class="text-[11px] font-medium mb-2" style="color: var(--text-tertiary);">10日表现</div>
+          <div class="flex justify-between items-end">
+            <span id="stat-avg-10d" class="text-lg font-bold tracking-tight">-</span>
+            <span id="stat-wr-10d" class="text-xs" style="color: var(--text-tertiary);">胜率 -</span>
+          </div>
+        </div>
+        <div class="stat-card p-4">
+          <div class="text-[11px] font-medium mb-2" style="color: var(--text-tertiary);">20日表现</div>
+          <div class="flex justify-between items-end">
+            <span id="stat-avg-20d" class="text-lg font-bold tracking-tight">-</span>
+            <span id="stat-wr-20d" class="text-xs" style="color: var(--text-tertiary);">胜率 -</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Table -->
+    <div class="glass-panel flex-1 overflow-hidden flex flex-col min-h-0">
+      <div class="flex items-center justify-between px-5 py-3" style="border-bottom: 1px solid var(--glass-border);">
+        <span class="text-xs font-semibold tracking-wide" style="color: var(--text-secondary);">选股结果</span>
+        <span id="result-count" class="text-xs" style="color: var(--text-tertiary);">等待选股...</span>
+      </div>
+      <div class="overflow-auto flex-1">
+        <table class="w-full text-xs">
+          <thead class="sticky top-0 z-10" style="background: rgba(28, 28, 30, 0.95); backdrop-filter: blur(20px);">
+            <tr style="border-bottom: 1px solid var(--glass-border);">
+              <th class="text-left px-4 py-2.5 font-medium w-10" style="color: var(--text-tertiary);">#</th>
+              <th class="text-left px-4 py-2.5 font-medium" style="color: var(--text-tertiary);">代码</th>
+              <th class="text-left px-4 py-2.5 font-medium" style="color: var(--text-tertiary);">名称</th>
+              <th class="text-right px-4 py-2.5 font-medium" style="color: var(--text-tertiary);">当日价格</th>
+              <th class="text-right px-4 py-2.5 font-medium" style="color: var(--text-tertiary);">3日涨幅</th>
+              <th class="text-right px-4 py-2.5 font-medium" style="color: var(--text-tertiary);">5日涨幅</th>
+              <th class="text-right px-4 py-2.5 font-medium" style="color: var(--text-tertiary);">10日涨幅</th>
+              <th class="text-right px-4 py-2.5 font-medium" style="color: var(--text-tertiary);">20日涨幅</th>
+            </tr>
+          </thead>
+          <tbody id="results-body">
+            <tr><td colspan="8" class="text-center py-16 text-xs" style="color: var(--text-tertiary);">输入公式并点击「开始选股」</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel: Chart + Histogram -->
+  <div class="col-span-5 flex flex-col gap-4 overflow-hidden">
+    <!-- K-line Chart -->
+    <div class="glass-panel flex-1 min-h-0 flex flex-col">
+      <div class="flex items-center justify-between px-5 py-3" style="border-bottom: 1px solid var(--glass-border);">
+        <span id="kline-title" class="text-xs font-semibold tracking-wide" style="color: var(--text-secondary);">K线图</span>
+        <span id="kline-subtitle" class="text-[11px]" style="color: var(--text-tertiary);"></span>
+      </div>
+      <div id="kline-container" class="flex-1" style="min-height:400px;height:100%;"></div>
+    </div>
+
+    <!-- Return Distribution Histogram -->
+    <div class="glass-panel h-[240px] flex-shrink-0 flex flex-col">
+      <div class="px-5 py-3 flex items-center gap-3" style="border-bottom: 1px solid var(--glass-border);">
+        <span class="text-xs font-semibold tracking-wide" style="color: var(--text-secondary);">收益分布</span>
+        <select id="hist-horizon" onchange="renderHistogram()" class="apple-select text-[11px] py-1 px-2">
+          <option value="return_3d">3日</option>
+          <option value="return_5d" selected>5日</option>
+          <option value="return_10d">10日</option>
+          <option value="return_20d">20日</option>
+        </select>
+      </div>
+      <div id="histogram-container" class="flex-1"></div>
+    </div>
+  </div>
+</main>
+
+<!-- Save Strategy Dialog -->
+<div id="save-dialog" class="fixed inset-0 dialog-backdrop flex items-center justify-center z-40 hidden">
+  <div class="dialog-content p-7 w-[440px] fade-in">
+    <h3 class="text-sm font-semibold mb-5" style="color: var(--text-primary);">保存选股策略</h3>
+    <input type="hidden" id="save-strategy-id" value="">
+    <div class="space-y-4">
+      <div>
+        <label class="block text-[11px] font-medium mb-1.5" style="color: var(--text-tertiary);">策略名称 <span style="color: var(--red-accent);">*</span></label>
+        <input type="text" id="save-name" placeholder="例: MACD底部金叉" class="apple-input w-full text-sm">
+      </div>
+      <div>
+        <label class="block text-[11px] font-medium mb-1.5" style="color: var(--text-tertiary);">备注说明</label>
+        <input type="text" id="save-desc" placeholder="可选的备注信息" class="apple-input w-full text-sm">
+      </div>
+      <div class="glass-panel-subtle p-3">
+        <div class="flex items-center gap-2 mb-1.5">
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full" style="background: var(--surface-glass); color: var(--text-tertiary);" id="save-formula-type-label">TDX</span>
+          <span class="text-[10px]" style="color: var(--text-tertiary);" id="save-filter-label"></span>
+        </div>
+        <pre class="text-xs font-mono whitespace-pre-wrap max-h-[80px] overflow-auto" style="color: var(--text-secondary);" id="save-formula-preview"></pre>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2.5 mt-6">
+      <button onclick="closeSaveDialog()" class="btn-pill btn-secondary text-xs">取消</button>
+      <button onclick="confirmSaveStrategy()" class="btn-pill btn-green text-xs font-semibold px-6">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Strategy Panel (slide-in from right) -->
+<div id="strategy-panel" class="fixed top-0 right-0 h-full w-[380px] border-l z-30 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col" style="border-color: var(--glass-border);">
+  <div class="flex items-center justify-between px-5 py-4" style="border-bottom: 1px solid var(--glass-border);">
+    <h3 class="text-sm font-semibold" style="color: var(--text-primary);">我的策略</h3>
+    <button onclick="toggleStrategyPanel()" class="w-7 h-7 rounded-full flex items-center justify-center transition-colors" style="color: var(--text-tertiary); background: var(--surface-glass);"
+      onmouseenter="this.style.background='rgba(255,255,255,0.1)'" onmouseleave="this.style.background='var(--surface-glass)'">&times;</button>
+  </div>
+  <div id="strategy-list" class="flex-1 overflow-auto p-4 space-y-3">
+    <div class="text-center py-12 text-xs" style="color: var(--text-tertiary);">暂无保存的策略</div>
+  </div>
+</div>
+<!-- Strategy panel backdrop -->
+<div id="strategy-backdrop" class="fixed inset-0 z-20 hidden" style="background: rgba(0,0,0,0.4); backdrop-filter: blur(4px);" onclick="toggleStrategyPanel()"></div>
+
+<!-- Data Update Progress Dialog -->
+<div id="update-dialog" class="fixed inset-0 dialog-backdrop flex items-center justify-center z-50 hidden">
+  <div class="dialog-content p-7 w-[500px] fade-in">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="text-sm font-semibold" style="color: var(--text-primary);">数据更新</h3>
+      <button onclick="closeUpdateDialog()" id="btn-close-update" class="w-7 h-7 rounded-full flex items-center justify-center transition-colors hidden" style="color: var(--text-tertiary); background: var(--surface-glass);"
+        onmouseenter="this.style.background='rgba(255,255,255,0.1)'" onmouseleave="this.style.background='var(--surface-glass)'">&times;</button>
+    </div>
+    <div class="space-y-3">
+      <div class="flex items-center justify-between text-xs">
+        <span style="color: var(--text-secondary);" id="update-status-text">Preparing...</span>
+        <span style="color: var(--text-tertiary);" id="update-progress-text">0 / 0</span>
+      </div>
+      <div class="w-full rounded-full h-2 overflow-hidden" style="background: rgba(255,255,255,0.06);">
+        <div id="update-progress-bar" class="update-progress-bar h-full rounded-full" style="width: 0%; background: var(--orange-accent);"></div>
+      </div>
+      <div class="text-[11px]" style="color: var(--text-tertiary);" id="update-current-stock">--</div>
+      <div id="update-log" class="glass-panel-subtle p-3 h-[180px] overflow-auto text-[11px] font-mono space-y-0.5" style="color: var(--text-tertiary);"></div>
+    </div>
+    <div class="flex justify-end mt-5">
+      <span id="update-result-msg" class="text-xs" style="color: var(--text-secondary);"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay" class="fixed inset-0 dialog-backdrop flex items-center justify-center z-50 hidden">
+  <div class="dialog-content p-10 text-center fade-in" style="min-width: 360px;">
+    <div class="apple-spinner mx-auto mb-5"></div>
+    <div class="text-sm font-medium" id="loading-text" style="color: var(--text-primary);">正在选股...</div>
+    <div class="text-xs mt-2" id="loading-sub" style="color: var(--text-tertiary);">扫描股票中</div>
+    <div id="loading-progress-wrap" class="mt-4 hidden">
+      <div class="w-full rounded-full h-1.5 overflow-hidden" style="background: rgba(255,255,255,0.06);">
+        <div id="loading-progress-bar" class="h-full rounded-full transition-all duration-300" style="width: 0%; background: var(--blue-accent);"></div>
+      </div>
+      <div class="flex justify-between mt-2">
+        <span id="loading-progress-detail" class="text-[11px]" style="color: var(--text-tertiary);">0 / 0</span>
+        <span id="loading-progress-matched" class="text-[11px]" style="color: var(--text-tertiary);">匹配 0 只</span>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+// ─── State ──────────────────────────────────────────────────────────
+let currentFormulaType = 'tdx';
+let screenResults = [];
+let screenDate = '';
+let klineChart = null;
+let histogramChart = null;
+let templates = {};
+
+// ─── Initialization ─────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  // Load templates
+  try {
+    const resp = await fetch('/api/formula/templates');
+    templates = await resp.json();
+    updateTemplateDropdown();
+  } catch(e) { console.warn('Failed to load templates:', e); }
+
+  // Handle window resize for charts
+  window.addEventListener('resize', () => {
+    if (klineChart) klineChart.resize();
+    if (histogramChart) histogramChart.resize();
+  });
+
+  // Load saved strategies
+  loadStrategies();
+
+  // Load data status
+  loadDataStatus();
+});
+
+// ─── Tab Switching ──────────────────────────────────────────────────
+function switchTab(type) {
+  currentFormulaType = type;
+  ['tdx', 'python', 'pseudo'].forEach(t => {
+    const btn = document.getElementById('tab-' + t);
+    if (t === type) {
+      btn.className = btn.className.replace('tab-inactive', 'tab-active');
+    } else {
+      btn.className = btn.className.replace('tab-active', 'tab-inactive');
+    }
+  });
+  updateTemplateDropdown();
+
+  // Update placeholder
+  const editor = document.getElementById('formula-editor');
+  const placeholders = {
+    tdx: '输入通达信公式...\n例: CROSS(MA(CLOSE, 5), MA(CLOSE, 10))',
+    python: '输入Python表达式...\n例: cross(ma(close, 5), ma(close, 10))',
+    pseudo: '输入中文伪代码...\n例: 5日均线 上穿 10日均线',
+  };
+  editor.placeholder = placeholders[type] || '';
+}
+
+// ─── Templates ──────────────────────────────────────────────────────
+function updateTemplateDropdown() {
+  const select = document.getElementById('template-select');
+  const items = templates[currentFormulaType] || [];
+  select.innerHTML = '<option value="">选择模板...</option>';
+  items.forEach((t, i) => {
+    select.innerHTML += `<option value="${i}" title="${t.description}">${t.name}</option>`;
+  });
+}
+
+function loadTemplate(idx) {
+  if (idx === '') return;
+  const items = templates[currentFormulaType] || [];
+  const t = items[parseInt(idx)];
+  if (t) {
+    document.getElementById('formula-editor').value = t.formula;
+  }
+  document.getElementById('template-select').value = '';
+}
+
+// ─── Formula Validation ─────────────────────────────────────────────
+async function validateFormula() {
+  const formula = document.getElementById('formula-editor').value.trim();
+  if (!formula) { showMsg('请输入公式', 'red'); return; }
+
+  try {
+    const resp = await fetch('/api/formula/validate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ formula, formula_type: currentFormulaType }),
+    });
+    const data = await resp.json();
+    if (data.valid) {
+      showMsg('公式有效', 'green');
+    } else {
+      showMsg(data.message, 'red');
+    }
+  } catch(e) {
+    showMsg('验证失败: ' + e.message, 'red');
+  }
+}
+
+// ─── Stock Screening ────────────────────────────────────────────────
+let _screenPollTimer = null;
+
+async function screenStocks() {
+  const formula = document.getElementById('formula-editor').value.trim();
+  if (!formula) { showMsg('请输入公式', 'red'); return; }
+
+  screenDate = document.getElementById('screen-date').value.replace(/-/g, '');
+  const excludeSt = document.getElementById('exclude-st').checked;
+  const marketFilter = document.getElementById('market-filter').value || null;
+
+  showLoading(true, '正在选股...', '准备中', true);
+
+  try {
+    const resp = await fetch('/api/screen', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        formula,
+        formula_type: currentFormulaType,
+        date: screenDate,
+        exclude_st: excludeSt,
+        market_filter: marketFilter,
+      }),
+    });
+    const data = await resp.json();
+
+    if (data.async) {
+      // New async mode — poll for progress
+      _screenPollTimer = setInterval(pollScreenProgress, 400);
+    } else if (data.success) {
+      // Sync fallback (shouldn't happen but handle gracefully)
+      showLoading(false);
+      handleScreenResult(data);
+    } else {
+      showLoading(false);
+      showMsg(data.message, 'red');
+      document.getElementById('result-count').textContent = '选股失败';
+    }
+  } catch(e) {
+    showLoading(false);
+    showMsg('请求失败: ' + e.message, 'red');
+  }
+}
+
+async function pollScreenProgress() {
+  try {
+    const resp = await fetch('/api/screen/progress');
+    const d = await resp.json();
+
+    if (d.total > 0) {
+      const pct = Math.round(d.current / d.total * 100);
+      document.getElementById('loading-text').textContent = `正在选股... ${pct}%`;
+      document.getElementById('loading-sub').textContent = d.message || '';
+      document.getElementById('loading-progress-bar').style.width = pct + '%';
+      document.getElementById('loading-progress-detail').textContent = `${d.current} / ${d.total}`;
+      document.getElementById('loading-progress-matched').textContent = `匹配 ${d.matched || 0} 只`;
+    }
+
+    if (d.status === 'completed' && d.data) {
+      clearInterval(_screenPollTimer);
+      showLoading(false);
+      handleScreenResult(d.data);
+    } else if (d.status === 'error') {
+      clearInterval(_screenPollTimer);
+      showLoading(false);
+      showMsg(d.message, 'red');
+      document.getElementById('result-count').textContent = '选股失败';
+    }
+  } catch(e) {
+    // Ignore transient polling errors
+  }
+}
+
+function handleScreenResult(data) {
+  if (data.success) {
+    screenResults = data.results;
+    renderResultsTable(data.results);
+    renderStatistics(data.stats, data.total_matched, data.total_screened);
+    renderHistogram();
+    document.getElementById('btn-export').classList.toggle('hidden', data.results.length === 0);
+    if (data.results.length > 0) {
+      loadKline(data.results[0].code, data.results[0].name);
+    }
+  } else {
+    showMsg(data.message, 'red');
+    document.getElementById('result-count').textContent = '选股失败';
+  }
+}
+
+// ─── Results Table ──────────────────────────────────────────────────
+function renderResultsTable(results) {
+  const tbody = document.getElementById('results-body');
+  document.getElementById('result-count').textContent =
+    `共 ${results.length} 只匹配`;
+
+  if (results.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-12 text-gray-500">未找到匹配的股票</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = results.map((r, i) => `
+    <tr class="result-row cursor-pointer transition-colors" onclick="loadKline('${r.code}', '${r.name}')">
+      <td class="px-3 py-2 text-gray-500">${i + 1}</td>
+      <td class="px-3 py-2 font-mono text-blue-400">${r.code}</td>
+      <td class="px-3 py-2 text-gray-200">${r.name}</td>
+      <td class="px-3 py-2 text-right text-gray-300">${r.date_price.toFixed(2)}</td>
+      <td class="px-3 py-2 text-right ${pctClass(r.return_3d)}">${fmtPct(r.return_3d)}</td>
+      <td class="px-3 py-2 text-right ${pctClass(r.return_5d)}">${fmtPct(r.return_5d)}</td>
+      <td class="px-3 py-2 text-right ${pctClass(r.return_10d)}">${fmtPct(r.return_10d)}</td>
+      <td class="px-3 py-2 text-right ${pctClass(r.return_20d)}">${fmtPct(r.return_20d)}</td>
+    </tr>
+  `).join('');
+}
+
+// ─── Statistics Panel ───────────────────────────────────────────────
+function renderStatistics(stats, matched, screened) {
+  const panel = document.getElementById('stats-panel');
+  panel.classList.remove('hidden');
+
+  [3, 5, 10, 20].forEach(h => {
+    const avg = stats[`avg_${h}d`];
+    const wr = stats[`win_rate_${h}d`];
+    const avgEl = document.getElementById(`stat-avg-${h}d`);
+    const wrEl = document.getElementById(`stat-wr-${h}d`);
+
+    if (avg !== null && avg !== undefined) {
+      avgEl.textContent = (avg > 0 ? '+' : '') + avg.toFixed(2) + '%';
+      avgEl.className = 'text-lg font-bold ' + (avg > 0 ? 'text-up' : avg < 0 ? 'text-down' : 'text-gray-300');
+    } else {
+      avgEl.textContent = '-';
+      avgEl.className = 'text-lg font-bold text-gray-500';
+    }
+
+    if (wr !== null && wr !== undefined) {
+      wrEl.textContent = `胜率 ${wr.toFixed(1)}%`;
+      wrEl.className = 'text-sm ' + (wr >= 50 ? 'text-up' : 'text-down');
+    } else {
+      wrEl.textContent = '胜率 -';
+      wrEl.className = 'text-sm text-gray-400';
+    }
+  });
+}
+
+// ─── K-line Chart ───────────────────────────────────────────────────
+async function loadKline(code, name) {
+  document.getElementById('kline-title').textContent = `${code} ${name}`;
+
+  if (typeof echarts === 'undefined') {
+    document.getElementById('kline-container').innerHTML =
+      '<div class="flex items-center justify-center h-full text-sm" style="color:var(--text-tertiary);">ECharts 库加载失败，请刷新页面</div>';
+    return;
+  }
+
+  try {
+    const resp = await fetch(`/api/kline/${code}?center_date=${screenDate}&days_before=60&days_after=30`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    renderKlineChart(data);
+    document.getElementById('kline-subtitle').textContent = `选股日: ${data.screen_date}`;
+  } catch(e) {
+    console.error('Failed to load K-line:', e);
+    document.getElementById('kline-container').innerHTML =
+      '<div class="flex items-center justify-center h-full text-sm" style="color:var(--text-tertiary);">K线数据加载失败: ' + e.message + '</div>';
+  }
+}
+
+function renderKlineChart(data) {
+  const container = document.getElementById('kline-container');
+  // Clear any error message
+  if (!klineChart && container.firstChild && container.firstChild.tagName === 'DIV') {
+    container.innerHTML = '';
+  }
+  if (!klineChart) {
+    klineChart = echarts.init(container, 'dark');
+  }
+
+  // Determine limit-up threshold based on stock code board
+  const code = data.code || '';
+  const limitPct = (code.startsWith('300') || code.startsWith('688')) ? 19.8 : 9.8;
+
+  // Detect limit-up days (pct_change >= threshold)
+  const isLimitUp = data.dates.map((_, i) => {
+    const pct = data.pct_change && data.pct_change[i] != null ? data.pct_change[i] : null;
+    return pct !== null && pct >= limitPct;
+  });
+
+  // Prepare candlestick data: [open, close, low, high]
+  // With per-item styling for limit-up days
+  const candleData = data.dates.map((_, i) => {
+    const item = { value: [data.open[i], data.close[i], data.low[i], data.high[i]] };
+    if (isLimitUp[i]) {
+      item.itemStyle = { color: '#FFD60A', borderColor: '#FFD60A' };
+    }
+    return item;
+  });
+
+  // Color volume bars — yellow for limit-up, red/green otherwise
+  const volumeData = data.volume.map((v, i) => ({
+    value: v,
+    itemStyle: {
+      color: isLimitUp[i] ? 'rgba(255,214,10,0.7)' :
+             (data.close[i] >= data.open[i] ? '#ef4444' : '#22c55e')
+    },
+  }));
+
+  // Format amount for tooltip
+  function fmtAmount(val) {
+    if (val == null) return '-';
+    if (val >= 1e8) return (val / 1e8).toFixed(2) + '亿';
+    if (val >= 1e4) return (val / 1e4).toFixed(1) + '万';
+    return val.toFixed(0);
+  }
+
+  const option = {
+    backgroundColor: 'transparent',
+    animation: false,
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'cross',
+        lineStyle: { color: 'rgba(255,255,255,0.2)', width: 0.5 },
+        crossStyle: { color: 'rgba(255,255,255,0.2)', width: 0.5 },
+      },
+      backgroundColor: 'rgba(28,28,30,0.92)',
+      borderColor: 'rgba(255,255,255,0.08)',
+      borderWidth: 1,
+      padding: [8, 12],
+      textStyle: { color: '#f5f5f7', fontSize: 12 },
+      formatter: function(params) {
+        if (!params || params.length === 0) return '';
+        const idx = params[0].dataIndex;
+        const dateStr = data.dates[idx];
+        const pct = data.pct_change && data.pct_change[idx] != null
+          ? data.pct_change[idx] : null;
+        const amt = data.amount && data.amount[idx] != null
+          ? data.amount[idx] : null;
+        const close = data.close[idx];
+
+        let pctStr = '-';
+        let pctColor = '#f5f5f7';
+        if (pct !== null) {
+          pctStr = (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
+          pctColor = pct > 0 ? '#FF453A' : pct < 0 ? '#30D158' : '#f5f5f7';
+        }
+
+        const limitTag = isLimitUp[idx]
+          ? ' <span style="color:#FFD60A;font-size:10px;">涨停</span>' : '';
+
+        return `<div style="font-size:11px;line-height:1.8;">` +
+          `<div style="color:rgba(245,245,247,0.5);">${dateStr}</div>` +
+          `<div>收盘 <b>${close != null ? close.toFixed(2) : '-'}</b></div>` +
+          `<div>涨幅 <span style="color:${pctColor};font-weight:600;">${pctStr}</span>${limitTag}</div>` +
+          `<div>成交额 ${fmtAmount(amt)}</div>` +
+          `</div>`;
+      },
+    },
+    legend: {
+      data: ['MA5', 'MA10', 'MA20'],
+      top: 5, right: 10,
+      textStyle: { color: '#94a3b8', fontSize: 11 },
+      itemWidth: 15, itemHeight: 2,
+    },
+    grid: [
+      { left: '8%', right: '3%', top: '8%', height: '55%' },
+      { left: '8%', right: '3%', top: '70%', height: '20%' },
+    ],
+    xAxis: [
+      {
+        type: 'category', data: data.dates, gridIndex: 0,
+        axisLine: { lineStyle: { color: '#334155' } },
+        axisLabel: { color: '#64748b', fontSize: 10 },
+        splitLine: { show: false },
+        axisTick: { show: false },
+      },
+      {
+        type: 'category', data: data.dates, gridIndex: 1,
+        axisLine: { lineStyle: { color: '#334155' } },
+        axisLabel: { show: false },
+        splitLine: { show: false },
+        axisTick: { show: false },
+      },
+    ],
+    yAxis: [
+      {
+        scale: true, gridIndex: 0,
+        axisLine: { show: false },
+        axisLabel: { color: '#64748b', fontSize: 10 },
+        splitLine: { lineStyle: { color: '#1e293b' } },
+      },
+      {
+        scale: true, gridIndex: 1,
+        axisLine: { show: false },
+        axisLabel: { show: false },
+        splitLine: { show: false },
+      },
+    ],
+    dataZoom: [
+      { type: 'inside', xAxisIndex: [0, 1], start: 20, end: 100 },
+    ],
+    series: [
+      {
+        name: 'K线', type: 'candlestick', data: candleData,
+        itemStyle: {
+          color: '#ef4444', color0: '#22c55e',
+          borderColor: '#ef4444', borderColor0: '#22c55e',
+        },
+        markLine: {
+          symbol: 'none',
+          data: [{ xAxis: data.screen_date }],
+          lineStyle: { color: 'rgba(245, 158, 11, 0.25)', width: 0.5, type: 'dashed' },
+          label: { formatter: '选股日', color: 'rgba(245, 158, 11, 0.5)', fontSize: 9, distance: 8 },
+        },
+      },
+      {
+        name: 'MA5', type: 'line', data: data.ma5,
+        smooth: true, symbol: 'none', lineStyle: { width: 1, color: '#f59e0b' },
+      },
+      {
+        name: 'MA10', type: 'line', data: data.ma10,
+        smooth: true, symbol: 'none', lineStyle: { width: 1, color: '#3b82f6' },
+      },
+      {
+        name: 'MA20', type: 'line', data: data.ma20,
+        smooth: true, symbol: 'none', lineStyle: { width: 1, color: '#a855f7' },
+      },
+      {
+        name: 'Volume', type: 'bar', xAxisIndex: 1, yAxisIndex: 1,
+        data: volumeData,
+      },
+    ],
+  };
+
+  klineChart.setOption(option, true);
+  // Force resize in case flex layout hasn't resolved container dimensions yet
+  setTimeout(() => { if (klineChart) klineChart.resize(); }, 50);
+}
+
+// ─── Return Distribution Histogram ──────────────────────────────────
+function renderHistogram() {
+  if (screenResults.length === 0) return;
+
+  const container = document.getElementById('histogram-container');
+  if (!histogramChart) {
+    histogramChart = echarts.init(container, 'dark');
+  }
+
+  const field = document.getElementById('hist-horizon').value;
+  const values = screenResults.map(r => r[field]).filter(v => v !== null && v !== undefined);
+
+  if (values.length === 0) {
+    histogramChart.clear();
+    return;
+  }
+
+  // Create bins
+  const binSize = 2;
+  const minVal = Math.floor(Math.min(...values) / binSize) * binSize;
+  const maxVal = Math.ceil(Math.max(...values) / binSize) * binSize;
+  const bins = [];
+  const counts = [];
+
+  for (let b = minVal; b <= maxVal; b += binSize) {
+    bins.push(`${b}~${b + binSize}%`);
+    const count = values.filter(v => v >= b && v < b + binSize).length;
+    counts.push({ value: count, itemStyle: { color: b >= 0 ? '#ef4444' : '#22c55e' } });
+  }
+
+  const option = {
+    backgroundColor: 'transparent',
+    animation: false,
+    tooltip: { trigger: 'axis', backgroundColor: 'rgba(15,23,42,0.95)', borderColor: '#334155', textStyle: { color: '#e2e8f0', fontSize: 11 } },
+    grid: { left: '10%', right: '5%', top: '10%', bottom: '20%' },
+    xAxis: {
+      type: 'category', data: bins,
+      axisLabel: { color: '#64748b', fontSize: 9, rotate: 45 },
+      axisLine: { lineStyle: { color: '#334155' } },
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: { color: '#64748b', fontSize: 10 },
+      axisLine: { show: false },
+      splitLine: { lineStyle: { color: '#1e293b' } },
+    },
+    series: [{ type: 'bar', data: counts, barMaxWidth: 30 }],
+  };
+
+  histogramChart.setOption(option, true);
+  setTimeout(() => { if (histogramChart) histogramChart.resize(); }, 50);
+}
+
+// ─── CSV Export ──────────────────────────────────────────────────────
+function exportCSV() {
+  if (screenResults.length === 0) return;
+  const header = '代码,名称,当日价格,3日涨幅%,5日涨幅%,10日涨幅%,20日涨幅%\n';
+  const rows = screenResults.map(r =>
+    `${r.code},${r.name},${r.date_price},${r.return_3d ?? ''},${r.return_5d ?? ''},${r.return_10d ?? ''},${r.return_20d ?? ''}`
+  ).join('\n');
+  const blob = new Blob(['\ufeff' + header + rows], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `screen_${screenDate}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ─── Utilities ──────────────────────────────────────────────────────
+function fmtPct(val) {
+  if (val === null || val === undefined) return '-';
+  return (val > 0 ? '+' : '') + val.toFixed(2) + '%';
+}
+
+function pctClass(val) {
+  if (val === null || val === undefined) return 'text-gray-500';
+  return val > 0 ? 'text-up' : val < 0 ? 'text-down' : 'text-gray-300';
+}
+
+function showMsg(text, color) {
+  const el = document.getElementById('validate-msg');
+  el.textContent = text;
+  el.className = 'text-sm ' + (color === 'green' ? 'text-green-400' : color === 'red' ? 'text-red-400' : 'text-gray-400');
+  setTimeout(() => { el.textContent = ''; }, 5000);
+}
+
+function showLoading(show, title, sub, showProgress) {
+  const overlay = document.getElementById('loading-overlay');
+  const progressWrap = document.getElementById('loading-progress-wrap');
+  if (show) {
+    document.getElementById('loading-text').textContent = title || '处理中...';
+    document.getElementById('loading-sub').textContent = sub || '';
+    if (showProgress) {
+      progressWrap.classList.remove('hidden');
+      document.getElementById('loading-progress-bar').style.width = '0%';
+      document.getElementById('loading-progress-detail').textContent = '0 / 0';
+      document.getElementById('loading-progress-matched').textContent = '匹配 0 只';
+    } else {
+      progressWrap.classList.add('hidden');
+    }
+    overlay.classList.remove('hidden');
+  } else {
+    overlay.classList.add('hidden');
+    progressWrap.classList.add('hidden');
+    if (_screenPollTimer) { clearInterval(_screenPollTimer); _screenPollTimer = null; }
+  }
+}
+// ─── Data Update ────────────────────────────────────────────────────
+let _updatePollTimer = null;
+
+async function loadDataStatus() {
+  try {
+    const resp = await fetch('/api/data/status');
+    const data = await resp.json();
+    const label = document.getElementById('data-status-label');
+    const isMock = data.akshare_available === false;
+    const isUnknown = data.akshare_available === null || data.akshare_available === undefined;
+    if (isMock) {
+      label.textContent = '模拟数据 (无网络连接)';
+      label.style.color = 'var(--orange-accent)';
+    } else if (data.cached_stocks > 0) {
+      const end = data.data_end || '?';
+      const src = isUnknown ? '' : ' (真实数据)';
+      label.textContent = `${data.cached_stocks} 只已缓存${src}, 最新: ${end}`;
+      label.style.color = 'var(--text-tertiary)';
+    } else {
+      label.textContent = '暂无数据 — 请点击更新';
+      label.style.color = 'var(--text-tertiary)';
+    }
+  } catch(e) { console.warn('Failed to load data status:', e); }
+}
+
+async function startDataUpdate() {
+  const dialog = document.getElementById('update-dialog');
+  const log = document.getElementById('update-log');
+  const bar = document.getElementById('update-progress-bar');
+  const statusText = document.getElementById('update-status-text');
+  const progressText = document.getElementById('update-progress-text');
+  const currentStock = document.getElementById('update-current-stock');
+  const closeBtn = document.getElementById('btn-close-update');
+  const resultMsg = document.getElementById('update-result-msg');
+  const updateBtn = document.getElementById('btn-update-data');
+
+  // Reset UI
+  log.innerHTML = '';
+  bar.style.width = '0%';
+  bar.style.background = 'var(--orange-accent)';
+  statusText.textContent = '准备中...';
+  progressText.textContent = '0 / 0';
+  currentStock.textContent = '--';
+  closeBtn.classList.add('hidden');
+  resultMsg.textContent = '';
+  updateBtn.disabled = true;
+  updateBtn.classList.add('opacity-50');
+  dialog.classList.remove('hidden');
+
+  // Start update
+  try {
+    const resp = await fetch('/api/data/update', { method: 'POST' });
+    const data = await resp.json();
+    if (!data.success) {
+      statusText.textContent = data.message;
+      closeBtn.classList.remove('hidden');
+      updateBtn.disabled = false;
+      updateBtn.classList.remove('opacity-50');
+      return;
+    }
+  } catch(e) {
+    statusText.textContent = '启动失败: ' + e.message;
+    closeBtn.classList.remove('hidden');
+    updateBtn.disabled = false;
+    updateBtn.classList.remove('opacity-50');
+    return;
+  }
+
+  // Poll for progress
+  let lastLogLen = 0;
+  _updatePollTimer = setInterval(async () => {
+    try {
+      const resp = await fetch('/api/data/progress');
+      const d = await resp.json();
+
+      if (d.total > 0) {
+        const pct = Math.round(d.current / d.total * 100);
+        bar.style.width = pct + '%';
+        progressText.textContent = `${d.current} / ${d.total}`;
+        statusText.textContent = d.status === 'running' ? `更新中... ${pct}%` : d.status;
+        currentStock.textContent = d.code ? `${d.code} ${d.name}` : '';
+      } else if (d.status === 'running' && d.message) {
+        // Show message even when total is 0 (e.g. during source detection)
+        statusText.textContent = d.message;
+      }
+
+      // Append new log entries
+      if (d.log && d.log.length > lastLogLen) {
+        for (let i = lastLogLen; i < d.log.length; i++) {
+          const isErr = d.log[i].includes('Error') || d.log[i].includes('错误') || d.log[i].includes('失败');
+          addUpdateLog(d.log[i], isErr ? 'text-red-400' : 'text-gray-400');
+        }
+        lastLogLen = d.log.length;
+      }
+
+      // Check completion
+      if (d.status === 'completed') {
+        clearInterval(_updatePollTimer);
+        bar.style.width = '100%';
+        bar.style.background = 'var(--green-accent)';
+        statusText.textContent = '更新完成';
+        resultMsg.textContent = d.message;
+        addUpdateLog(d.message, 'text-green-400');
+        closeBtn.classList.remove('hidden');
+        updateBtn.disabled = false;
+        updateBtn.classList.remove('opacity-50');
+        loadDataStatus();
+      } else if (d.status === 'error') {
+        clearInterval(_updatePollTimer);
+        bar.style.background = 'var(--red-accent)';
+        statusText.textContent = '更新出错';
+        resultMsg.textContent = d.message;
+        addUpdateLog(d.message, 'text-red-400');
+        closeBtn.classList.remove('hidden');
+        updateBtn.disabled = false;
+        updateBtn.classList.remove('opacity-50');
+      } else if (d.status === 'idle') {
+        // Update finished before polling started
+        clearInterval(_updatePollTimer);
+        closeBtn.classList.remove('hidden');
+        updateBtn.disabled = false;
+        updateBtn.classList.remove('opacity-50');
+        loadDataStatus();
+      }
+    } catch(e) {
+      // Ignore transient errors during polling
+    }
+  }, 500);
+}
+
+function addUpdateLog(msg, colorClass) {
+  const log = document.getElementById('update-log');
+  const div = document.createElement('div');
+  div.className = colorClass || 'text-gray-400';
+  div.textContent = msg;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function closeUpdateDialog() {
+  document.getElementById('update-dialog').classList.add('hidden');
+  if (_updatePollTimer) clearInterval(_updatePollTimer);
+  document.getElementById('update-progress-bar').style.background = 'var(--orange-accent)';
+}
+
+// ─── Strategy Persistence ────────────────────────────────────────────
+let savedStrategies = [];
+
+async function loadStrategies() {
+  try {
+    const resp = await fetch('/api/strategies');
+    const data = await resp.json();
+    savedStrategies = data.strategies || [];
+    updateStrategyCount();
+    renderStrategyList();
+  } catch(e) { console.warn('Failed to load strategies:', e); }
+}
+
+function updateStrategyCount() {
+  const el = document.getElementById('strategy-count');
+  el.textContent = savedStrategies.length > 0 ? `(${savedStrategies.length})` : '';
+}
+
+function openSaveDialog(existingId) {
+  const dialog = document.getElementById('save-dialog');
+  const formula = document.getElementById('formula-editor').value.trim();
+  if (!formula && !existingId) { showMsg('请先输入公式', 'red'); return; }
+
+  // If editing existing strategy, pre-fill
+  if (existingId) {
+    const s = savedStrategies.find(x => x.id === existingId);
+    if (s) {
+      document.getElementById('save-strategy-id').value = s.id;
+      document.getElementById('save-name').value = s.name;
+      document.getElementById('save-desc').value = s.description || '';
+      document.getElementById('save-formula-preview').textContent = s.formula;
+      document.getElementById('save-formula-type-label').textContent = {tdx:'TDX',python:'Python',pseudo:'伪代码'}[s.formula_type] || s.formula_type;
+      const filters = [];
+      if (s.exclude_st) filters.push('排除ST');
+      if (s.market_filter) filters.push(s.market_filter);
+      document.getElementById('save-filter-label').textContent = filters.join(' | ') || '全部市场';
+    }
+  } else {
+    document.getElementById('save-strategy-id').value = '';
+    document.getElementById('save-name').value = '';
+    document.getElementById('save-desc').value = '';
+    document.getElementById('save-formula-preview').textContent = formula;
+    document.getElementById('save-formula-type-label').textContent = {tdx:'TDX',python:'Python',pseudo:'伪代码'}[currentFormulaType];
+    const filters = [];
+    if (document.getElementById('exclude-st').checked) filters.push('排除ST');
+    const mf = document.getElementById('market-filter').value;
+    if (mf) filters.push(mf);
+    document.getElementById('save-filter-label').textContent = filters.join(' | ') || '全部市场';
+  }
+  dialog.classList.remove('hidden');
+  document.getElementById('save-name').focus();
+}
+
+function closeSaveDialog() {
+  document.getElementById('save-dialog').classList.add('hidden');
+}
+
+async function confirmSaveStrategy() {
+  const name = document.getElementById('save-name').value.trim();
+  if (!name) { showMsg('请输入策略名称', 'red'); return; }
+
+  const existingId = document.getElementById('save-strategy-id').value || null;
+  const formula = existingId
+    ? (savedStrategies.find(x => x.id === existingId)?.formula || document.getElementById('formula-editor').value.trim())
+    : document.getElementById('formula-editor').value.trim();
+  const formulaType = existingId
+    ? (savedStrategies.find(x => x.id === existingId)?.formula_type || currentFormulaType)
+    : currentFormulaType;
+
+  try {
+    const resp = await fetch('/api/strategies', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        id: existingId,
+        name: name,
+        description: document.getElementById('save-desc').value.trim(),
+        formula: formula,
+        formula_type: formulaType,
+        exclude_st: document.getElementById('exclude-st').checked,
+        market_filter: document.getElementById('market-filter').value || null,
+      }),
+    });
+    const data = await resp.json();
+    if (data.success) {
+      savedStrategies = data.strategies;
+      updateStrategyCount();
+      renderStrategyList();
+      closeSaveDialog();
+      showMsg(existingId ? '策略已更新' : '策略已保存', 'green');
+    }
+  } catch(e) {
+    showMsg('保存失败: ' + e.message, 'red');
+  }
+}
+
+function toggleStrategyPanel() {
+  const panel = document.getElementById('strategy-panel');
+  const backdrop = document.getElementById('strategy-backdrop');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    panel.classList.remove('open');
+    backdrop.classList.add('hidden');
+  } else {
+    loadStrategies();
+    panel.classList.add('open');
+    backdrop.classList.remove('hidden');
+  }
+}
+
+function renderStrategyList() {
+  const container = document.getElementById('strategy-list');
+  if (savedStrategies.length === 0) {
+    container.innerHTML = '<div class="text-center text-gray-500 py-8 text-sm">暂无保存的策略</div>';
+    return;
+  }
+
+  const typeLabels = {tdx:'TDX', python:'Python', pseudo:'伪代码'};
+  container.innerHTML = savedStrategies.map(s => {
+    const typeLabel = typeLabels[s.formula_type] || s.formula_type;
+    const filters = [];
+    if (s.exclude_st) filters.push('排除ST');
+    if (s.market_filter) filters.push(s.market_filter);
+    const filterStr = filters.length > 0 ? filters.join(', ') : '全部';
+    const time = s.updated_at ? s.updated_at.slice(0, 16).replace('T', ' ') : '';
+
+    return `
+      <div class="strategy-card bg-gray-800 border border-gray-700 rounded-lg p-3 cursor-pointer" onclick="applyStrategy('${s.id}')">
+        <div class="flex items-start justify-between mb-1.5">
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-gray-200 truncate">${esc(s.name)}</div>
+            ${s.description ? `<div class="text-xs text-gray-500 mt-0.5 truncate">${esc(s.description)}</div>` : ''}
+          </div>
+          <div class="flex items-center gap-1 ml-2 flex-shrink-0">
+            <button onclick="event.stopPropagation(); openSaveDialog('${s.id}')" title="编辑"
+              class="text-gray-500 hover:text-blue-400 p-1 rounded transition-colors text-xs">&#9998;</button>
+            <button onclick="event.stopPropagation(); deleteStrategy('${s.id}', '${esc(s.name)}')" title="删除"
+              class="text-gray-500 hover:text-red-400 p-1 rounded transition-colors text-xs">&#10005;</button>
+          </div>
+        </div>
+        <pre class="text-xs text-gray-400 font-mono bg-gray-900/60 rounded px-2 py-1.5 whitespace-pre-wrap max-h-[60px] overflow-hidden mb-2">${esc(s.formula)}</pre>
+        <div class="flex items-center gap-2 text-xs text-gray-500">
+          <span class="px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">${typeLabel}</span>
+          <span>${filterStr}</span>
+          <span class="ml-auto">${time}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function applyStrategy(id) {
+  const s = savedStrategies.find(x => x.id === id);
+  if (!s) return;
+
+  // Switch to the correct formula type tab
+  switchTab(s.formula_type);
+  // Fill in the formula
+  document.getElementById('formula-editor').value = s.formula;
+  // Apply filter settings
+  document.getElementById('exclude-st').checked = s.exclude_st;
+  document.getElementById('market-filter').value = s.market_filter || '';
+  // Close the panel
+  toggleStrategyPanel();
+  showMsg(`已加载策略: ${s.name}`, 'green');
+}
+
+async function deleteStrategy(id, name) {
+  if (!confirm(`确定要删除策略 "${name}" 吗？`)) return;
+  try {
+    const resp = await fetch(`/api/strategies/${id}`, { method: 'DELETE' });
+    const data = await resp.json();
+    if (data.success) {
+      savedStrategies = data.strategies;
+      updateStrategyCount();
+      renderStrategyList();
+      showMsg('策略已删除', 'green');
+    }
+  } catch(e) {
+    showMsg('删除失败: ' + e.message, 'red');
+  }
+}
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+</script>
+</body>
+</html>
