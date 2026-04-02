@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # ─── Lark Grammar for TDX Formula Language ───────────────────────────
 
 TDX_GRAMMAR = r'''
-start: (statement ";"?)+
+start: statement (";" statement)* ";"?
 
 statement: NAME ":=" expr  -> local_assign
          | NAME ":" expr   -> output_assign
@@ -309,10 +309,27 @@ class TDXEngine:
     def __init__(self):
         self.parser = Lark(TDX_GRAMMAR, parser="earley", ambiguity="resolve")
 
+    @staticmethod
+    def _normalize_formula(formula: str) -> str:
+        """Normalize multiline TDX formulas into semicolon-delimited statements.
+
+        This avoids ambiguous parses such as BARSLAST(ZT) being split into two bare
+        expressions when statement separators are omitted.
+        """
+        lines = [ln.strip() for ln in formula.splitlines() if ln.strip()]
+        if not lines:
+            return ""
+        normalized = ";".join(lines)
+        # Collapse accidental repeated separators.
+        while ";;" in normalized:
+            normalized = normalized.replace(";;", ";")
+        return normalized
+
     def validate(self, formula: str) -> tuple:
         """Parse formula, return (is_valid, message)."""
         try:
-            tree = self.parser.parse(formula)
+            text = self._normalize_formula(formula)
+            tree = self.parser.parse(text)
             return True, "Formula is valid"
         except Exception as e:
             return False, f"Syntax error: {str(e)[:200]}"
@@ -329,7 +346,8 @@ class TDXEngine:
             True if the stock matches the formula at target_idx
         """
         try:
-            tree = self.parser.parse(formula)
+            text = self._normalize_formula(formula)
+            tree = self.parser.parse(text)
         except Exception as e:
             logger.warning(f"TDX parse error: {e}")
             return False

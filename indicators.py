@@ -33,6 +33,19 @@ def SMA(series: pd.Series, n: int, m: int = 1) -> pd.Series:
 
 def REF(series: pd.Series, n: int) -> pd.Series:
     """Reference N periods ago."""
+    if isinstance(n, pd.Series):
+        out = pd.Series(np.nan, index=series.index, dtype=float)
+        for i in range(len(series)):
+            k = n.iloc[i]
+            if pd.isna(k):
+                continue
+            k = int(k)
+            if k < 0:
+                continue
+            j = i - k
+            if j >= 0:
+                out.iloc[i] = series.iloc[j]
+        return out
     return series.shift(int(n))
 
 
@@ -60,11 +73,41 @@ def LONGCROSS(a: pd.Series, b, n: int) -> pd.Series:
 
 def HHV(series: pd.Series, n: int) -> pd.Series:
     """Highest value in last N periods."""
+    if isinstance(n, pd.Series):
+        out = pd.Series(np.nan, index=series.index, dtype=float)
+        s = series.astype(float)
+        for i in range(len(s)):
+            k = n.iloc[i]
+            if pd.isna(k):
+                continue
+            k = int(k)
+            if k <= 0:
+                continue
+            start = i - k + 1
+            if start < 0:
+                continue
+            out.iloc[i] = float(s.iloc[start:i + 1].max())
+        return out
     return series.rolling(window=int(n), min_periods=1).max()
 
 
 def LLV(series: pd.Series, n: int) -> pd.Series:
     """Lowest value in last N periods."""
+    if isinstance(n, pd.Series):
+        out = pd.Series(np.nan, index=series.index, dtype=float)
+        s = series.astype(float)
+        for i in range(len(s)):
+            k = n.iloc[i]
+            if pd.isna(k):
+                continue
+            k = int(k)
+            if k <= 0:
+                continue
+            start = i - k + 1
+            if start < 0:
+                continue
+            out.iloc[i] = float(s.iloc[start:i + 1].min())
+        return out
     return series.rolling(window=int(n), min_periods=1).min()
 
 
@@ -107,6 +150,22 @@ def BARSLAST(cond: pd.Series) -> pd.Series:
 
 def EVERY(cond: pd.Series, n: int) -> pd.Series:
     """True if condition True for all of last N periods."""
+    if isinstance(n, pd.Series):
+        out = pd.Series(False, index=cond.index, dtype=bool)
+        c = cond.fillna(False).astype(bool)
+        for i in range(len(c)):
+            k = n.iloc[i]
+            if pd.isna(k):
+                continue
+            k = int(k)
+            if k <= 0:
+                continue
+            s = i - k + 1
+            if s < 0:
+                continue
+            out.iloc[i] = bool(c.iloc[s:i + 1].all())
+        return out
+
     n = int(n)
     return cond.astype(float).rolling(window=n, min_periods=n).sum() == n
 

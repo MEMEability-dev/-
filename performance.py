@@ -5,7 +5,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-HORIZONS = [3, 5, 10, 20]
+HORIZONS = [3, 5, 10]
+MAX_GAIN_WINDOW = 15
 
 
 def calculate_returns(df, screen_idx: int) -> dict:
@@ -16,7 +17,7 @@ def calculate_returns(df, screen_idx: int) -> dict:
         screen_idx: Index of the screening date row
 
     Returns:
-        Dict with keys return_3d, return_5d, return_10d, return_20d (% values)
+        Dict with keys return_3d, return_5d, return_10d, return_max15d (% values)
     """
     screen_price = float(df.iloc[screen_idx]["close"])
     results = {}
@@ -29,6 +30,16 @@ def calculate_returns(df, screen_idx: int) -> dict:
             results[f"return_{h}d"] = round(pct, 2)
         else:
             results[f"return_{h}d"] = None
+
+    # Max gain within next 15 trading days using highest HIGH as sell point.
+    start = screen_idx + 1
+    end = min(len(df), screen_idx + MAX_GAIN_WINDOW + 1)
+    if start < end:
+        window_high = float(df.iloc[start:end]["high"].max())
+        max_pct = (window_high - screen_price) / screen_price * 100
+        results["return_max15d"] = round(max_pct, 2)
+    else:
+        results["return_max15d"] = None
 
     return results
 
@@ -44,24 +55,26 @@ def aggregate_stats(results: list) -> dict:
     """
     stats = {}
 
-    for h in HORIZONS:
-        key = f"return_{h}d"
+    metric_defs = [(f"return_{h}d", f"{h}d") for h in HORIZONS]
+    metric_defs.append(("return_max15d", "max15d"))
+
+    for key, tag in metric_defs:
         values = [r[key] for r in results if r.get(key) is not None]
 
         if values:
             arr = np.array(values)
-            stats[f"avg_{h}d"] = round(float(np.mean(arr)), 2)
-            stats[f"median_{h}d"] = round(float(np.median(arr)), 2)
-            stats[f"win_rate_{h}d"] = round(
+            stats[f"avg_{tag}"] = round(float(np.mean(arr)), 2)
+            stats[f"median_{tag}"] = round(float(np.median(arr)), 2)
+            stats[f"win_rate_{tag}"] = round(
                 float(np.sum(arr > 0) / len(arr) * 100), 1
             )
-            stats[f"max_gain_{h}d"] = round(float(np.max(arr)), 2)
-            stats[f"max_loss_{h}d"] = round(float(np.min(arr)), 2)
-            stats[f"std_{h}d"] = round(float(np.std(arr)), 2)
-            stats[f"count_{h}d"] = len(values)
+            stats[f"max_gain_{tag}"] = round(float(np.max(arr)), 2)
+            stats[f"max_loss_{tag}"] = round(float(np.min(arr)), 2)
+            stats[f"std_{tag}"] = round(float(np.std(arr)), 2)
+            stats[f"count_{tag}"] = len(values)
         else:
-            stats[f"avg_{h}d"] = None
-            stats[f"win_rate_{h}d"] = None
-            stats[f"count_{h}d"] = 0
+            stats[f"avg_{tag}"] = None
+            stats[f"win_rate_{tag}"] = None
+            stats[f"count_{tag}"] = 0
 
     return stats

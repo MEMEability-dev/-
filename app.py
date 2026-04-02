@@ -6,6 +6,7 @@ import logging
 import json
 import uuid
 import threading
+from typing import Optional
 from datetime import datetime
 import pandas as pd
 
@@ -20,7 +21,7 @@ import uvicorn
 from models import (
     FormulaType, ScreenRequest, ScreenResponse, StockResult,
     ValidateRequest, ValidateResponse,
-    Strategy, StrategySaveRequest,
+    Strategy, StrategySaveRequest, DataUpdateRequest,
 )
 from data_layer import (
     get_stock_list, get_screening_data, find_date_index,
@@ -49,8 +50,9 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 # ─── Screening Progress State ──────────────────────────────────────
 
 _screen_running = False
+_screen_cancel_requested = False
 _screen_progress = {
-    "status": "idle",  # idle, running, completed, error
+    "status": "idle",  # idle, running, completed, canceled, error
     "current": 0,
     "total": 0,
     "matched": 0,
@@ -75,12 +77,16 @@ def _filter_by_market(stocks, market: str):
     """Filter stocks by market segment based on code prefix."""
     if market == "主板":
         return stocks[
-            stocks["code"].str.startswith("60") | stocks["code"].str.startswith("000")
+            stocks["code"].astype(str).str.startswith("60") |
+            stocks["code"].astype(str).str.startswith("000") |
+            stocks["code"].astype(str).str.startswith("001") |
+            stocks["code"].astype(str).str.startswith("002") |
+            stocks["code"].astype(str).str.startswith("003")
         ]
     elif market == "创业板":
-        return stocks[stocks["code"].str.startswith("300")]
+        return stocks[stocks["code"].astype(str).str.startswith("300")]
     elif market == "科创板":
-        return stocks[stocks["code"].str.startswith("688")]
+        return stocks[stocks["code"].astype(str).str.startswith("688")]
     return stocks
 
 
@@ -108,7 +114,7 @@ async def api_validate(req: ValidateRequest):
 @app.post("/api/screen")
 async def api_screen(req: ScreenRequest):
     """Start screening in background. Poll /api/screen/progress for status."""
-    global _screen_running, _screen_progress, _screen_result
+    global _screen_running, _screen_progress, _screen_result, _screen_cancel_requested
 
     if _screen_running:
         return {"success": False, "message": "选股正在进行中，请稍候"}
@@ -121,6 +127,7 @@ async def api_screen(req: ScreenRequest):
 
     # Reset state
     _screen_result = None
+    _screen_cancel_requested = False
     _screen_progress = {
         "status": "running", "current": 0, "total": 0,
         "matched": 0, "code": "", "name": "", "message": "正在准备股票列表...",
@@ -140,15 +147,25 @@ async def api_screen(req: ScreenRequest):
 async def api_screen_progress():
     """Poll screening progress."""
     result = dict(_screen_progress)
-    if _screen_progress["status"] == "completed" and _screen_result is not None:
+    if _screen_progress["status"] in {"completed", "canceled"} and _screen_result is not None:
         result["data"] = _screen_result
     return result
+
+
+@app.post("/api/screen/cancel")
+async def api_screen_cancel():
+    """Request cancellation for current screening task."""
+    global _screen_cancel_requested
+    if not _screen_running:
+        return {"success": False, "message": "当前没有正在运行的选股任务"}
+    _screen_cancel_requested = True
+    return {"success": True, "message": "已请求取消，正在停止..."}
 
 
 def _run_screening(formula: str, formula_type: FormulaType, date: str,
                    exclude_st: bool, market_filter):
     """Background worker for stock screening."""
-    global _screen_running, _screen_progress, _screen_result
+    global _screen_running, _screen_progress, _screen_result, _screen_cancel_requested
 
     _screen_running = True
     try:
@@ -174,6 +191,23 @@ def _run_screening(formula: str, formula_type: FormulaType, date: str,
         screened = 0
 
         for i, (_, stock) in enumerate(stocks.iterrows()):
+            if _screen_cancel_requested:
+                stats = aggregate_stats([r.model_dump() for r in results])
+                _screen_result = ScreenResponse(
+                    success=True,
+                    message=f"已取消: 已扫描 {screened} 只股票, {errors} 个错误",
+                    total_screened=screened,
+                    total_matched=len(results),
+                    results=results,
+                    stats=stats,
+                ).model_dump()
+                _screen_progress.update({
+                    "status": "canceled",
+                    "matched": len(results),
+                    "message": f"已取消: 匹配 {len(results)} 只 / 扫描 {screened} 只",
+                })
+                return
+
             code = stock["code"]
             name = stock["name"]
 
@@ -184,7 +218,12 @@ def _run_screening(formula: str, formula_type: FormulaType, date: str,
             })
 
             try:
-                df = get_screening_data(code, date, lookback_days=400, forward_days=40)
+                df = get_screening_data(
+                    code, date,
+                    lookback_days=400,
+                    forward_days=40,
+                    cache_only=True,
+                )
                 if df.empty or len(df) < 30:
                     continue
 
@@ -204,7 +243,7 @@ def _run_screening(formula: str, formula_type: FormulaType, date: str,
                         return_3d=returns.get("return_3d"),
                         return_5d=returns.get("return_5d"),
                         return_10d=returns.get("return_10d"),
-                        return_20d=returns.get("return_20d"),
+                        return_max15d=returns.get("return_max15d"),
                     ))
 
             except Exception as e:
@@ -237,6 +276,7 @@ def _run_screening(formula: str, formula_type: FormulaType, date: str,
         })
     finally:
         _screen_running = False
+        _screen_cancel_requested = False
 
 
 @app.get("/api/kline/{stock_code}")
@@ -301,9 +341,15 @@ async def api_data_status():
 
 
 @app.post("/api/data/update")
-async def api_data_update():
+async def api_data_update(req: Optional[DataUpdateRequest] = None):
     """Start batch data update in background. Poll /api/data/progress for status."""
-    result = start_batch_update()
+    if req is None:
+        req = DataUpdateRequest()
+    result = start_batch_update(
+        market_filter=req.market_filter,
+        update_mode=req.update_mode,
+        max_workers=req.max_workers,
+    )
     return result
 
 

@@ -26,7 +26,7 @@ class StockResult(BaseModel):
     return_3d: Optional[float] = None
     return_5d: Optional[float] = None
     return_10d: Optional[float] = None
-    return_20d: Optional[float] = None
+    return_max15d: Optional[float] = None
 
 
 class ScreenResponse(BaseModel):
@@ -71,3 +71,9 @@ class StrategySaveRequest(BaseModel):
     formula_type: FormulaType
     exclude_st: bool = True
     market_filter: Optional[str] = None
+
+
+class DataUpdateRequest(BaseModel):
+    market_filter: Optional[str] = None  # 主板 / 创业板 / 科创板 / None
+    update_mode: str = "incremental"    # incremental / full
+    max_workers: int = Field(default=8, ge=1, le=32)
